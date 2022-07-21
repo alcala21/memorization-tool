@@ -1,21 +1,49 @@
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.orm import sessionmaker
+
+Base = declarative_base()
+
+
+class Card(Base):
+    __tablename__ = 'flashcard'
+    id = Column(Integer, primary_key=True)
+    question = Column(String)
+    answer = Column(String)
+    box = Column(Integer)
+
+
+engine = create_engine('sqlite:///flashcard.db?check_same_thread=False')
+Base.metadata.create_all(engine)
+
+Session = sessionmaker(bind=engine)
+session = Session()
+
+
 class FlashCards:
 
     def __init__(self):
-        self.menu = ['1. Add flashcards',
+        self.top_menu = ['1. Add flashcards',
                      '2. Practice flashcards',
                      '3. Exit']
         self.card_menu = ['1. Add a new flashcard', '2. Exit']
-        self.flashcards = dict()
+        self.question_menu = ['press "y" to see the answer:',
+                            'press "n" to skip:',
+                            'press "u" to update:']
+        self.update_menu = ['press "d" to delete the flashcard:',
+                            'press "e" to edit the flashcard:']
+        self.learning_menu = ['press "y" if your answer is correct:',
+                            'press "n" if your answer is wrong:']
 
-    def top_menu(self):
-        self.print("\n".join(self.menu))
-
-    def flash_menu(self):
-        self.print("\n".join(self.card_menu))
+    def show_menu(self, _menu, blank_line=True):
+        if blank_line:
+            self.print("\n".join(_menu))
+        else:
+            print("\n".join(_menu))
 
     def add(self):
         while True:
-            self.flash_menu()
+            self.show_menu(self.card_menu)
             val = input()
             try:
                 num = int(val)
@@ -35,27 +63,81 @@ class FlashCards:
             question = input("Question:\n").strip()
         while not answer:
             answer = input("Answer:\n").strip()
-        self.flashcards[question] = answer
 
-    def print_answer(self, question):
-        self.print(f"Answer: {self.flashcards[question]}")
+        new_card = Card(question=question, answer=answer, box=1)
+        session.add(new_card)
+        session.commit()
 
-    def ask_question(self, question):
-        self.print(f"Question: {question}")
-        option = input('Please press "y" to see the answer or press "n" to skip:\n')
-        if option == 'y':
-            self.print_answer(question)
+    def delete_card(self, card):
+        session.delete(card)
+        session.commit()
+
+    def edit_card(self, card):
+        self.print(f"current question: {card.question}")
+        card.question = input("please write a new question:\n")
+        self.print(f"current answer: {card.answer}")
+        card.answer = input("please write a new answer:\n")
+        session.commit()
+
+    def update_card(self, card):
+        while True:
+            self.show_menu(self.update_menu)
+            val = input()
+            if val == 'd':
+                self.delete_card(card)
+                break
+            elif val == 'e':
+                self.edit_card(card)
+                break
+            else:
+                self.print(f"{val} is not an option")
+
+    def show_card(self, card):
+        self.print(f"Answer: {card.answer}")
+        while True:
+            self.show_menu(self.learning_menu, blank_line=False)
+            val = input()
+            if val == 'y':
+                if card.box == 3:
+                    self.delete_card(card)
+                else:
+                    card.box += 1
+                    session.commit()
+                break
+            elif val == 'n':
+                card.box = 1
+                session.commit()
+                break
+            else:
+                self.print(f"{val} is not an option")
+
+    def ask_question(self, card):
+        self.print(f"Question: {card.question}")
+        while True:
+            self.show_menu(self.question_menu, blank_line=False)
+            val = input()
+            if val == 'y':
+                self.show_card(card)
+                break
+            elif val == 'n':
+                break
+            elif val == 'u':
+                self.update_card(card)
+                break
+            else:
+                self.print(f"{val} is not an option")
 
     def practice(self):
-        if not self.flashcards:
+        questions = session.query(Card).all()
+        if len(questions) == 0:
             self.print('There is no flashcard to practice!')
         else:
-            for question in self.flashcards:
-                self.ask_question(question)
+            for card in questions:
+                self.ask_question(card)
 
     def play(self):
         while True:
-            self.top_menu()
+            self.show_menu(self.top_menu)
             val = input()
             try:
                 num = int(val)
